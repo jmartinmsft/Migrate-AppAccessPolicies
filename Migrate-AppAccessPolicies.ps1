@@ -1000,6 +1000,7 @@ function GetApplicationPermissions {
             }
         }
     }
+    $Script:ApiAppRoles['dc890d15-9560-4a4c-9b7f-a736ec74ec40'] = "Exchange Full Access"
 }
 
 
@@ -1020,6 +1021,10 @@ GetApplicationPermissions
 
 $applicationAccessPolicies = Get-ApplicationAccessPolicy
 foreach($policy in $applicationAccessPolicies){
+    if([string]::IsNullOrEmpty($policy.ScopeIdentity)){
+        Write-Host "Skipping application access policy with missing information. AppId: $($policy.AppId) Identity: $($policy.Identity) AccessRight: $($policy.AccessRight)" -ForegroundColor Yellow
+        continue
+    }
     Write-Host "Processing application access policy: $($policy.ScopeIdentity)" -ForegroundColor Cyan
     $application = GetEntraApplication -appId $policy.AppId
     #Get SPN for app
@@ -1051,9 +1056,9 @@ foreach($policy in $applicationAccessPolicies){
                     }
                           
     foreach($resourceAppId in $application.requiredResourceAccess){
-        if($resourceAppId.resourceAppId -eq "00000003-0000-0000-c000-000000000000"){
+        if($resourceAppId.resourceAppId -eq "00000003-0000-0000-c000-000000000000" -or $resourceAppId.resourceAppId -eq "00000002-0000-0ff1-ce00-000000000000"){
             foreach($resourceAccess in $resourceAppId.resourceAccess){
-                if($Script:ApiAppRoles.ContainsKey($resourceAccess.id)){
+                if($Script:ApiAppRoles.ContainsKey($resourceAccess.id)){ # -or $resourceAccess.id -eq 'dc890d15-9560-4a4c-9b7f-a736ec74ec40'){
                     Write-Host "Checking the RBAC role assignments for $($exchSpn.ObjectId) and  $($Script:ApiAppRoles[$resourceAccess.id])" -ForegroundColor Green
                     #Check if role assignment exists for SPN and scope
                     $roleAssignment = Get-ManagementRoleAssignment -RoleAssignee $exchSpn.objectId -Role "Application $($Script:ApiAppRoles[$resourceAccess.id])"
