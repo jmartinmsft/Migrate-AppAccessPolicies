@@ -1019,7 +1019,7 @@ $exchangeRoles = Get-ManagementRole "Application *"
 #Get the service principal for the Graph API to be able to correlate the required permissions for Exchange with the app roles in Graph
 GetApplicationPermissions
 
-$applicationAccessPolicies = Get-ApplicationAccessPolicy
+$applicationAccessPolicies = Get-ApplicationAccessPolicy | Where-Object { $_.IsValid -eq $true }
 foreach($policy in $applicationAccessPolicies){
     if([string]::IsNullOrEmpty($policy.ScopeIdentity)){
         Write-Host "Skipping application access policy with missing information. AppId: $($policy.AppId) Identity: $($policy.Identity) AccessRight: $($policy.AccessRight)" -ForegroundColor Yellow
