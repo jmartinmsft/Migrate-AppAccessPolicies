@@ -22,7 +22,7 @@
     SOFTWARE
 #>
 
-# Version 20260421.1100
+# Version 20260331.922
 
 param (
     [ValidateSet("Global", "USGovernmentL4", "USGovernmentL5", "ChinaCloud")]
@@ -55,7 +55,7 @@ param (
     [ValidateSet("Graph", "EWS")]
     [Parameter(Mandatory = $false)]
     [string]$Api = "Graph",
-
+    
     [Parameter(Mandatory = $true)]
     [string]$AppId
 )
@@ -1034,44 +1034,49 @@ $policy = Get-ApplicationAccessPolicy | Where-Object { $_.AppId -eq $AppId }
     }
     Write-Host "Processing application access policy: $($policy.ScopeIdentity)" -ForegroundColor Cyan
     $application = GetEntraApplication -appId $policy.AppId
-    
-    #Check if management scope exists
-    $groupGuid = $policy.Identity.Substring($policy.Identity.IndexOf(";")+1)
-    $group = Get-DistributionGroup -Identity $groupGuid
-    Write-Host "Checking if management scope exists for group with DistinguishedName $($group.Name)..." -ForegroundColor Cyan -NoNewline
-    $scope = Get-ManagementScope | Where-Object {$_.RecipientFilter -match $group.DistinguishedName}
-    if([string]::IsNullOrEmpty($scope.Name)){
-        Write-Host "MISSING" -ForegroundColor Yellow
-    }
-    else{
-        Write-Host "EXISTS" -ForegroundColor Green
-    }
-    
     #Get SPN for app
     $appSpn = GetEntraServicePrincipal -appId $application.appId
-    Write-Host "Checking if service principal exists for $($application.displayName) with appId $($application.appId) in Exchange Online..." -ForegroundColor Cyan -NoNewline
     $exchSpn = Get-ServicePrincipal $appSpn.id -ErrorAction SilentlyContinue
     if([string]::IsNullOrEmpty($exchSpn)){
-        Write-Host "MISSING" -ForegroundColor Yellow
+        Write-Host "Create new service principal for $($application.displayName) with appId $($application.appId) in Exchange Online..." -ForegroundColor Green
+        $exchSpn = New-ServicePrincipal -AppId $policy.AppId  -DisplayName $application.displayName -ObjectId $appSpn.id
     }
     else{
-        Write-Host "EXISTS" -ForegroundColor Green
-        foreach($resourceAppId in $application.requiredResourceAccess){
+        Write-Verbose "Service principal already exists for $($application.displayName) with appId $($application.appId) in Exchange Online..."
+    }
+              #Check if management scope exists
+                    $groupGuid = $policy.Identity.Substring($policy.Identity.IndexOf(";")+1)
+                    $group = Get-DistributionGroup -Identity $groupGuid
+                    Write-Host "Checking if management scope exists for group with DistinguishedName $($group.DistinguishedName)..." -ForegroundColor Green
+                    $scope = Get-ManagementScope | Where-Object {$_.RecipientFilter -match $group.DistinguishedName}
+                    if([string]::IsNullOrEmpty($scope.Name)){
+                        Write-Host "Creating management scope for $($group.Name)..." -ForegroundColor Green
+                        if($policy.AccessRight -eq "RestrictAccess"){
+                            $scope = New-ManagementScope -Name "$($group.Name)_Scope" -RecipientRestrictionFilter "MemberOfGroup -eq '$($group.DistinguishedName)'"
+                        }
+                        else{
+                            $scope = New-ManagementScope -Name "$($group.Name)_Scope" -RecipientRestrictionFilter "MemberOfGroup -ne '$($group.DistinguishedName)'"
+                        }
+                    }
+                    else{
+                        Write-Verbose "Management scope already exists for $($group.Name)..."
+                    }
+                          
+    foreach($resourceAppId in $application.requiredResourceAccess){
         if($resourceAppId.resourceAppId -eq "00000003-0000-0000-c000-000000000000" -or $resourceAppId.resourceAppId -eq "00000002-0000-0ff1-ce00-000000000000"){
             foreach($resourceAccess in $resourceAppId.resourceAccess){
                 if($Script:ApiAppRoles.ContainsKey($resourceAccess.id)){ # -or $resourceAccess.id -eq 'dc890d15-9560-4a4c-9b7f-a736ec74ec40'){
-                    Write-Host "Checking the RBAC role assignments for $($exchSpn.ObjectId) and $($Script:ApiAppRoles[$resourceAccess.id])..." -ForegroundColor Cyan -NoNewline
+                    Write-Host "Checking the RBAC role assignments for $($exchSpn.ObjectId) and $($Script:ApiAppRoles[$resourceAccess.id])" -ForegroundColor Green
                     #Check if role assignment exists for SPN and scope
                     $roleAssignment = Get-ManagementRoleAssignment -RoleAssignee $exchSpn.objectId -Role "Application $($Script:ApiAppRoles[$resourceAccess.id])" -CustomRecipientWriteScope $scope.Name
                     if([string]::IsNullOrEmpty($roleAssignment.Name)){
-                        Write-Host "MISSING" -ForegroundColor Yellow
+                        Write-Host "Creating role assignment for $($application.displayName) with permission $($Script:ApiAppRoles[$resourceAccess.id]) in Exchange Online..." -ForegroundColor Green
+                        New-ManagementRoleAssignment -Name "$($exchSpn.objectId)_$($Script:ApiAppRoles[$resourceAccess.id])" -Role "Application $($Script:ApiAppRoles[$resourceAccess.id])" -App $exchSpn.ObjectId -CustomResourceScope $scope.Name
                     }
                     else{
-                        Write-Host "EXISTS" -ForegroundColor Green
+                        Write-Verbose "Role assignment already exists for $($application.displayName) with permission $($Script:ApiAppRoles[$resourceAccess.id]) in Exchange Online..."
                     }
                 }
             }
         }
     }
-    }
-    

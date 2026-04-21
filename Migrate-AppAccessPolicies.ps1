@@ -1003,6 +1003,10 @@ function GetApplicationPermissions {
     $Script:ApiAppRoles['dc890d15-9560-4a4c-9b7f-a736ec74ec40'] = "Exchange Full Access"
 }
 
+if(-not (Get-ConnectionInformation)){
+    Write-Warning "Connection to Exchange Online remote PowerShell is not established. Please establish a connection using Connect-ExchangeOnline before running this script."
+    exit
+}
 
 $cloudService = Get-CloudServiceEndpoint $AzureEnvironment
 $azureADEndpoint = $cloudService.AzureADEndpoint
@@ -1061,7 +1065,7 @@ foreach($policy in $applicationAccessPolicies){
                 if($Script:ApiAppRoles.ContainsKey($resourceAccess.id)){ # -or $resourceAccess.id -eq 'dc890d15-9560-4a4c-9b7f-a736ec74ec40'){
                     Write-Host "Checking the RBAC role assignments for $($exchSpn.ObjectId) and  $($Script:ApiAppRoles[$resourceAccess.id])" -ForegroundColor Green
                     #Check if role assignment exists for SPN and scope
-                    $roleAssignment = Get-ManagementRoleAssignment -RoleAssignee $exchSpn.objectId -Role "Application $($Script:ApiAppRoles[$resourceAccess.id])"
+                    $roleAssignment = Get-ManagementRoleAssignment -RoleAssignee $exchSpn.objectId -Role "Application $($Script:ApiAppRoles[$resourceAccess.id])" -CustomRecipientWriteScope $scope.Name
                     if([string]::IsNullOrEmpty($roleAssignment.Name)){
                         Write-Host "Creating role assignment for $($application.displayName) with permission $($Script:ApiAppRoles[$resourceAccess.id]) in Exchange Online..." -ForegroundColor Green
                         New-ManagementRoleAssignment -Name "$($exchSpn.objectId)_$($Script:ApiAppRoles[$resourceAccess.id])" -Role "Application $($Script:ApiAppRoles[$resourceAccess.id])" -App $exchSpn.ObjectId -CustomResourceScope $scope.Name
