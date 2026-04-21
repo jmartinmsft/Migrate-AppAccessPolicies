@@ -22,7 +22,7 @@
     SOFTWARE
 #>
 
-# Version 20260421.1100
+# Version 20260421.1610
 
 param (
     [ValidateSet("Global", "USGovernmentL4", "USGovernmentL5", "ChinaCloud")]
@@ -963,12 +963,14 @@ function GetEntraApplication{
     param(
         [string]$appId
     )
-    Write-Host "Searching for Entra App registrations for $($appId)..." -ForegroundColor Green
+    Write-Host "Searching for Entra App registrations for $($appId)..." -ForegroundColor Cyan -NoNewline
     $AadApplicationResults = Invoke-GraphApiRequest -Query "applications(appId='{$($appID)}')" -AccessToken $Script:Token -GraphApiUrl $APIResource
     if($AadApplicationResults.statusCode -eq '200'){
+        Write-Host "FOUND" -ForegroundColor Green
         return $AadApplicationResults.Content
     }
     else{
+        Write-Host "NOT FOUND" -ForegroundColor Yellow
         Write-Host "Unable to retrieve Entra App registration for $($appId)." -ForegroundColor Red
         return $null
     }
@@ -978,12 +980,14 @@ function GetEntraServicePrincipal{
     param(
         [string]$appId
     )
-    Write-Host "Getting the service principal for $($appId)..." -ForegroundColor Green
+    Write-Host "Getting the service principal for $($appId)..." -ForegroundColor Cyan -NoNewline
     $ServicePrincipal = Invoke-GraphApiRequest -Query "servicePrincipals(appId='{$($appId)}')" -AccessToken $Script:Token -GraphApiUrl $APIResource
     if($ServicePrincipal.StatusCode -eq '200'){
+        Write-Host "FOUND" -ForegroundColor Green
         return $ServicePrincipal.Content
     }
     else{
+        Write-Host "NOT FOUND" -ForegroundColor Yellow
         Write-Host "Unable to retrieve Entra service principals for $($appId)." -ForegroundColor Red
         return $null
     }
@@ -1029,10 +1033,10 @@ GetApplicationPermissions
 $policy = Get-ApplicationAccessPolicy | Where-Object { $_.AppId -eq $AppId }
 
     if([string]::IsNullOrEmpty($policy.ScopeIdentity)){
-        Write-Host "Skipping application access policy with missing information. AppId: $($policy.AppId) Identity: $($policy.Identity) AccessRight: $($policy.AccessRight)" -ForegroundColor Yellow
+        Write-Host "Skipping application access policy with NOT FOUND information. AppId: $($policy.AppId) Identity: $($policy.Identity) AccessRight: $($policy.AccessRight)" -ForegroundColor Yellow
         continue
     }
-    Write-Host "Processing application access policy: $($policy.ScopeIdentity)" -ForegroundColor Cyan
+    Write-Host "Processing application access policy: $($policy.ScopeIdentity)" -ForegroundColor Green
     $application = GetEntraApplication -appId $policy.AppId
     
     #Check if management scope exists
@@ -1041,10 +1045,10 @@ $policy = Get-ApplicationAccessPolicy | Where-Object { $_.AppId -eq $AppId }
     Write-Host "Checking if management scope exists for group with DistinguishedName $($group.Name)..." -ForegroundColor Cyan -NoNewline
     $scope = Get-ManagementScope | Where-Object {$_.RecipientFilter -match $group.DistinguishedName}
     if([string]::IsNullOrEmpty($scope.Name)){
-        Write-Host "MISSING" -ForegroundColor Yellow
+        Write-Host "NOT FOUND" -ForegroundColor Yellow
     }
     else{
-        Write-Host "EXISTS" -ForegroundColor Green
+        Write-Host "FOUND" -ForegroundColor Green
     }
     
     #Get SPN for app
@@ -1052,10 +1056,10 @@ $policy = Get-ApplicationAccessPolicy | Where-Object { $_.AppId -eq $AppId }
     Write-Host "Checking if service principal exists for $($application.displayName) with appId $($application.appId) in Exchange Online..." -ForegroundColor Cyan -NoNewline
     $exchSpn = Get-ServicePrincipal $appSpn.id -ErrorAction SilentlyContinue
     if([string]::IsNullOrEmpty($exchSpn)){
-        Write-Host "MISSING" -ForegroundColor Yellow
+        Write-Host "NOT FOUND" -ForegroundColor Yellow
     }
     else{
-        Write-Host "EXISTS" -ForegroundColor Green
+        Write-Host "FOUND" -ForegroundColor Green
         foreach($resourceAppId in $application.requiredResourceAccess){
         if($resourceAppId.resourceAppId -eq "00000003-0000-0000-c000-000000000000" -or $resourceAppId.resourceAppId -eq "00000002-0000-0ff1-ce00-000000000000"){
             foreach($resourceAccess in $resourceAppId.resourceAccess){
@@ -1064,10 +1068,10 @@ $policy = Get-ApplicationAccessPolicy | Where-Object { $_.AppId -eq $AppId }
                     #Check if role assignment exists for SPN and scope
                     $roleAssignment = Get-ManagementRoleAssignment -RoleAssignee $exchSpn.objectId -Role "Application $($Script:ApiAppRoles[$resourceAccess.id])" -CustomRecipientWriteScope $scope.Name
                     if([string]::IsNullOrEmpty($roleAssignment.Name)){
-                        Write-Host "MISSING" -ForegroundColor Yellow
+                        Write-Host "NOT FOUND" -ForegroundColor Yellow
                     }
                     else{
-                        Write-Host "EXISTS" -ForegroundColor Green
+                        Write-Host "FOUND" -ForegroundColor Green
                     }
                 }
             }
