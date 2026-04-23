@@ -56,7 +56,7 @@ param (
     [Parameter(Mandatory = $false)]
     [string]$Api = "Graph",
     
-    [Parameter(Mandatory = $true)]
+    [Parameter(Mandatory = $true,HelpMessage="The AppId parameter specifies the AppId for the policy to migrate.")]
     [string]$AppId
 )
 
